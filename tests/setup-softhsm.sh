@@ -137,10 +137,14 @@ ca_sign() {
     CN=$3
     KEYID=$4
     let "SERIAL+=1"
+    # BSD sed expects a space between -i and the backup extension, GNU sed
+    # expects the extension right after the -i argument. Portable scripts thus
+    # can't use sed -i.
     sed -e "s|cn = .*|cn = $CN|g" \
         -e "s|serial = .*|serial = $SERIAL|g" \
         -e "/^ca$/d" \
-        -i ${TMPPDIR}/cert.cfg
+        "${TMPPDIR}/cert.cfg" > "${TMPPDIR}/cert.cfg.new"
+    mv -f "${TMPPDIR}/cert.cfg.new" "${TMPPDIR}/cert.cfg"
     "$certtool" --generate-certificate --outfile="${CRT}.crt" --template=${TMPPDIR}/cert.cfg \
         --provider="$P11LIB" --load-privkey "pkcs11:object=$LABEL;type=private" \
         --load-pubkey "pkcs11:object=$LABEL;type=public" --outder \
