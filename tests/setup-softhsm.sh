@@ -122,7 +122,7 @@ CACRTN="caCert"
 let "SERIAL+=1"
 pkcs11-tool --keypairgen --key-type="RSA:2048" --login --pin=$PINVALUE --module="$P11LIB" \
 	--label="${CACRTN}" --id="$KEYID"
-"$certtool" --generate-self-signed --outfile="${CACRT}.crt" --template=${TMPPDIR}/cert.cfg \
+"${certtool}" --generate-self-signed --outfile="${CACRT}.crt"         --template=${TMPPDIR}/cert.cfg \
         --provider="$P11LIB" --load-privkey "pkcs11:object=$CACRTN;type=private" \
         --load-pubkey "pkcs11:object=$CACRTN;type=public" --outder
 pkcs11-tool --write-object "${CACRT}.crt" --type=cert --id=$KEYID \
@@ -145,7 +145,8 @@ ca_sign() {
         -e "/^ca$/d" \
         "${TMPPDIR}/cert.cfg" > "${TMPPDIR}/cert.cfg.new"
     mv -f "${TMPPDIR}/cert.cfg.new" "${TMPPDIR}/cert.cfg"
-    "$certtool" --generate-certificate --outfile="${CRT}.crt" --template=${TMPPDIR}/cert.cfg \
+
+    "${certtool}" --generate-certificate --outfile="${CRT}.crt" --template=${TMPPDIR}/cert.cfg \
         --provider="$P11LIB" --load-privkey "pkcs11:object=$LABEL;type=private" \
         --load-pubkey "pkcs11:object=$LABEL;type=public" --outder \
         --load-ca-certificate "${CACRT}.crt" --inder \

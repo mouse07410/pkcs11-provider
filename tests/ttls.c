@@ -6,7 +6,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-static void ossl_err_print()
+static void ossl_err_print(void)
 {
     bool first = true;
     unsigned long err = 0;
