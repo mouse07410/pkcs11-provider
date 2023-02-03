@@ -11,6 +11,7 @@
 #include "config.h"
 
 #include <stdbool.h>
+#include <sys/types.h>
 
 #include "pkcs11.h"
 #include <openssl/core_dispatch.h>

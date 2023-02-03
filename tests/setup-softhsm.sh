@@ -19,10 +19,25 @@ if [ "$(uname)" == "Darwin" ]; then
     certtool=$(type -p gnutls-certtool)
 else
     certtool=$(type -p certtool)
+    sed_backup=""
 fi
 if [ -z "$certtool" ]; then
     echo "Missing GnuTLS certtool (on macOS, commonly installed as gnutls-certtool)"
     exit 0
+fi
+
+# macOS uses BSD sed, which expects the argument after -i (with a space after
+# it!) to be the backup suffix, while GNU sed expects a potential backup suffix
+# directly after -i and interprets -i <expression> as in-place editing with no
+# backup.
+#
+# Use "${sed_inplace[@]}" to make that work transparently by setting it to the
+# arguments required to achieve in-place editing without backups depending on
+# the version of sed.
+if sed --version 2>/dev/null | grep -q 'GNU sed'; then
+	sed_inplace=("-i")
+else
+	sed_inplace=("-i" "")
 fi
 
 if [ "$P11KITCLIENTPATH" = "" ]; then
@@ -122,7 +137,7 @@ CACRTN="caCert"
 let "SERIAL+=1"
 pkcs11-tool --keypairgen --key-type="RSA:2048" --login --pin=$PINVALUE --module="$P11LIB" \
 	--label="${CACRTN}" --id="$KEYID"
-"${certtool}" --generate-self-signed --outfile="${CACRT}.crt"         --template=${TMPPDIR}/cert.cfg \
+"${certtool}" --generate-self-signed --outfile="${CACRT}.crt" --template=${TMPPDIR}/cert.cfg \
         --provider="$P11LIB" --load-privkey "pkcs11:object=$CACRTN;type=private" \
         --load-pubkey "pkcs11:object=$CACRTN;type=public" --outder
 pkcs11-tool --write-object "${CACRT}.crt" --type=cert --id=$KEYID \
@@ -143,9 +158,8 @@ ca_sign() {
     sed -e "s|cn = .*|cn = $CN|g" \
         -e "s|serial = .*|serial = $SERIAL|g" \
         -e "/^ca$/d" \
-        "${TMPPDIR}/cert.cfg" > "${TMPPDIR}/cert.cfg.new"
-    mv -f "${TMPPDIR}/cert.cfg.new" "${TMPPDIR}/cert.cfg"
-
+        "${sed_inplace[@]}" \
+        "${TMPPDIR}/cert.cfg"
     "${certtool}" --generate-certificate --outfile="${CRT}.crt" --template=${TMPPDIR}/cert.cfg \
         --provider="$P11LIB" --load-privkey "pkcs11:object=$LABEL;type=private" \
         --load-pubkey "pkcs11:object=$LABEL;type=public" --outder \
@@ -155,7 +169,6 @@ ca_sign() {
         --label="$LABEL" --module="$P11LIB"
 
 }
-
 
 # generate RSA key pair and self-signed certificate
 KEYID='0001'
