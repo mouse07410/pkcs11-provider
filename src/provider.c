@@ -1091,10 +1091,10 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *handle, const OSSL_DISPATCH *in,
     core_params[3] =
         OSSL_PARAM_construct_utf8_ptr(P11PROV_PKCS11_MODULE_ALLOW_EXPORT,
                                       &allow_export, sizeof(allow_export));
-    core_params[3] =
+    core_params[4] =
         OSSL_PARAM_construct_utf8_ptr(P11PROV_PKCS11_MODULE_LOGIN_BEHAVIOR,
                                       &login_behavior, sizeof(login_behavior));
-    core_params[4] = OSSL_PARAM_construct_end();
+    core_params[5] = OSSL_PARAM_construct_end();
     ret = core_get_params(handle, core_params);
     if (ret != RET_OSSL_OK) {
         ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
