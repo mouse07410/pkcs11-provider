@@ -35,6 +35,7 @@
 #define P11PROV_PKCS11_MODULE_TOKEN_PIN "pkcs11-module-token-pin"
 #define P11PROV_PKCS11_MODULE_ALLOW_EXPORT "pkcs11-module-allow-export"
 #define P11PROV_PKCS11_MODULE_LOGIN_BEHAVIOR "pkcs11-module-login-behavior"
+#define P11PROV_PKCS11_MODULE_LOAD_BEHAVIOR "pkcs11-module-load-behavior"
 
 #define P11PROV_DEFAULT_PROPERTIES "provider=pkcs11"
 #define P11PROV_NAME_RSA "RSA"
@@ -56,6 +57,12 @@
 #define P11PROV_NAMES_HKDF P11PROV_NAME_HKDF
 #define P11PROV_DESCS_HKDF "PKCS11 HKDF Implementation"
 #define P11PROV_DESCS_URI "PKCS11 URI Store"
+#define P11PROV_NAMES_ED25519 "ED25519:1.3.101.112"
+#define P11PROV_NAME_ED25519 "ED25519"
+#define P11PROV_DESCS_ED25519 "PKCS11 ED25519 Implementation"
+#define P11PROV_NAMES_ED448 "ED448:1.3.101.113"
+#define P11PROV_NAME_ED448 "ED448"
+#define P11PROV_DESCS_ED448 "PKCS11 ED448 Implementation"
 
 #define P11PROV_PARAM_KEY_LABEL "pkcs11_key_label"
 #define P11PROV_PARAM_KEY_ID "pkcs11_key_id"
@@ -105,6 +112,10 @@ void p11prov_raise(P11PROV_CTX *ctx, const char *file, int line,
         P11PROV_debug("Error: 0x%08lX; " format, (unsigned long)(errnum), \
                       ##__VA_ARGS__); \
     } while (0)
+
+int p11prov_set_error_mark(P11PROV_CTX *ctx);
+int p11prov_clear_last_error_mark(P11PROV_CTX *ctx);
+int p11prov_pop_error_to_mark(P11PROV_CTX *ctx);
 
 /* dispatching */
 #define DECL_DISPATCH_FUNC(type, prefix, name) \

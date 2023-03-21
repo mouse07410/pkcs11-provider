@@ -118,14 +118,6 @@ static void get_slot_mechanisms(P11PROV_CTX *ctx, struct p11prov_slot *slot)
     slot->nmechs = mechs_num;
 }
 
-static void trim_padded_field(CK_UTF8CHAR *field, ssize_t n)
-{
-    for (; n > 0 && field[n - 1] == ' '; n--) {
-        field[n - 1] = 0;
-    }
-}
-
-#define trim(x) trim_padded_field(x, sizeof(x))
 static const char slot_desc_fmt[] = "PKCS#11 Token (Slot %lu - %s)";
 
 CK_RV p11prov_init_slots(P11PROV_CTX *ctx, P11PROV_SLOTS_CTX **slots)
@@ -842,6 +834,9 @@ done:
 static CK_RV check_slot(struct p11prov_slot *provslot, P11PROV_URI *uri,
                         CK_MECHANISM_TYPE mechtype, bool rw)
 {
+    P11PROV_debug("Checking Slot id=%lu, uri=%p, mechtype=%x, rw=%s)",
+                  provslot->id, uri, mechtype, rw ? "true" : "false");
+
     if ((provslot->slot.flags & CKF_TOKEN_PRESENT) == 0) {
         return CKR_TOKEN_NOT_PRESENT;
     }
@@ -1078,7 +1073,8 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
     int slot_idx;
     CK_RV ret;
 
-    P11PROV_debug("Get session on slot %lu", id);
+    P11PROV_debug("Get session on slot %lu, reqlogin=%s, rw=%s", id,
+                  reqlogin ? "true" : "false", rw ? "true" : "false");
 
     ret = p11prov_take_slots(provctx, &slots);
     if (ret != CKR_OK) {
@@ -1086,6 +1082,7 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
     }
 
     if (id != CK_UNAVAILABLE_INFORMATION && next_slotid == NULL) {
+        P11PROV_debug("single-shot request for slot %lu", id);
         slot_idx = 0;
         /* single shot request for a specific slot */
         for (slot = p11prov_fetch_slot(slots, &slot_idx); slot != NULL;
@@ -1109,8 +1106,13 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
             }
         }
     } else {
+        P11PROV_debug("cycle through available slots");
         slot_idx = 0;
         ret = CKR_CANCEL;
+
+        /* set error mark so we can clear spurious errors on success */
+        p11prov_set_error_mark(provctx);
+
         /* caller is cycling through slots, find the next viable one */
         for (slot = p11prov_fetch_slot(slots, &slot_idx); slot != NULL;
              slot = p11prov_fetch_slot(slots, &slot_idx)) {
@@ -1118,7 +1120,10 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
                 /* seek to next slot to check */
                 continue;
             } else {
-                /* found next slot */
+                /* Found "next" slot.
+                 * Reset the id, so from now on we check every following slot
+                 * and return the first one that successfully passes checks.
+                 */
                 id = CK_UNAVAILABLE_INFORMATION;
             }
 
@@ -1136,6 +1141,7 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
             }
 
             id = slot->id;
+            P11PROV_debug("Found a slot %lu", id);
             break;
         }
 
@@ -1143,6 +1149,10 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
             /* Found a slot, return it and the next slot to the caller for
              * continuation if the current slot does not yield the desired
              * results */
+
+            /* if there was any error, remove it, as we got success */
+            p11prov_pop_error_to_mark(provctx);
+
             *slotid = id;
             if (next_slotid) {
                 P11PROV_SLOT *next_slot;
@@ -1154,6 +1164,9 @@ CK_RV p11prov_get_session(P11PROV_CTX *provctx, CK_SLOT_ID *slotid,
                 }
             }
         } else {
+            /* otherwise clear the mark and leave errors on the stack */
+            p11prov_clear_last_error_mark(provctx);
+
             if (next_slotid) {
                 *next_slotid = CK_UNAVAILABLE_INFORMATION;
             }

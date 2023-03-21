@@ -89,7 +89,7 @@ static void populate_interface(P11PROV_INTERFACE *intf, CK_INTERFACE *ck_intf)
     } list;
 
     list.fns = (CK_FUNCTION_LIST_PTR)ck_intf->pFunctionList;
-    P11PROV_debug("Populating Interfaces with '%s', version %d.%d\n",
+    P11PROV_debug("Populating Interfaces with '%s', version %d.%d",
                   ck_intf->pInterfaceName, list.fns->version.major,
                   list.fns->version.minor);
 
@@ -288,6 +288,8 @@ CK_RV p11prov_module_init(P11PROV_MODULE *mctx)
     if (ret) {
         return ret;
     }
+    trim(ck_info.manufacturerID);
+    trim(ck_info.libraryDescription);
     P11PROV_debug("Module Info: ck_ver:%d.%d lib: '%s' '%s' ver:%d.%d",
                   (int)ck_info.cryptokiVersion.major,
                   (int)ck_info.cryptokiVersion.minor, ck_info.manufacturerID,

@@ -359,6 +359,10 @@ static OSSL_FUNC_core_get_params_fn *core_get_params = NULL;
 static OSSL_FUNC_core_new_error_fn *core_new_error = NULL;
 static OSSL_FUNC_core_set_error_debug_fn *core_set_error_debug = NULL;
 static OSSL_FUNC_core_vset_error_fn *core_vset_error = NULL;
+static OSSL_FUNC_core_set_error_mark_fn *core_set_error_mark = NULL;
+static OSSL_FUNC_core_clear_last_error_mark_fn *core_clear_last_error_mark =
+    NULL;
+static OSSL_FUNC_core_pop_error_to_mark_fn *core_pop_error_to_mark = NULL;
 
 static void p11prov_get_core_dispatch_funcs(const OSSL_DISPATCH *in)
 {
@@ -377,6 +381,16 @@ static void p11prov_get_core_dispatch_funcs(const OSSL_DISPATCH *in)
             break;
         case OSSL_FUNC_CORE_VSET_ERROR:
             core_vset_error = OSSL_FUNC_core_vset_error(iter_in);
+            break;
+        case OSSL_FUNC_CORE_SET_ERROR_MARK:
+            core_set_error_mark = OSSL_FUNC_core_set_error_mark(iter_in);
+            break;
+        case OSSL_FUNC_CORE_CLEAR_LAST_ERROR_MARK:
+            core_clear_last_error_mark =
+                OSSL_FUNC_core_clear_last_error_mark(iter_in);
+            break;
+        case OSSL_FUNC_CORE_POP_ERROR_TO_MARK:
+            core_pop_error_to_mark = OSSL_FUNC_core_pop_error_to_mark(iter_in);
             break;
         default:
             /* Just ignore anything we don't understand */
@@ -399,6 +413,21 @@ void p11prov_raise(P11PROV_CTX *ctx, const char *file, int line,
     core_set_error_debug(ctx->handle, file, line, func);
     core_vset_error(ctx->handle, errnum, fmt, args);
     va_end(args);
+}
+
+int p11prov_set_error_mark(P11PROV_CTX *ctx)
+{
+    return core_set_error_mark(ctx->handle);
+}
+
+int p11prov_clear_last_error_mark(P11PROV_CTX *ctx)
+{
+    return core_clear_last_error_mark(ctx->handle);
+}
+
+int p11prov_pop_error_to_mark(P11PROV_CTX *ctx)
+{
+    return core_pop_error_to_mark(ctx->handle);
 }
 
 /* Parameters we provide to the core */
@@ -483,7 +512,7 @@ static CK_RV alg_set_op(OSSL_ALGORITHM **op, int idx, OSSL_ALGORITHM *alg)
             return RET_OSSL_ERR; \
         } \
         operation##_idx++; \
-    } while (0);
+    } while (0)
 
 #define ADD_ALGO(NAME, name, operation) \
     ADD_ALGO_EXT(NAME, operation, P11PROV_DEFAULT_PROPERTIES, \
@@ -558,13 +587,17 @@ static CK_RV operations_init(P11PROV_CTX *ctx)
 {
     P11PROV_SLOTS_CTX *slots;
     P11PROV_SLOT *slot;
-    CK_ULONG checklist[] = {
-        CKM_RSA_PKCS_KEY_PAIR_GEN, RSA_SIG_MECHS,
-        RSAPSS_SIG_MECHS,          RSA_ENC_MECHS,
-        CKM_EC_KEY_PAIR_GEN,       ECDSA_SIG_MECHS,
-        CKM_ECDH1_DERIVE,          CKM_ECDH1_COFACTOR_DERIVE,
-        CKM_HKDF_DERIVE,           DIGEST_MECHS
-    };
+    CK_ULONG checklist[] = { CKM_RSA_PKCS_KEY_PAIR_GEN,
+                             RSA_SIG_MECHS,
+                             RSAPSS_SIG_MECHS,
+                             RSA_ENC_MECHS,
+                             CKM_EC_KEY_PAIR_GEN,
+                             ECDSA_SIG_MECHS,
+                             CKM_ECDH1_DERIVE,
+                             CKM_ECDH1_COFACTOR_DERIVE,
+                             CKM_HKDF_DERIVE,
+                             DIGEST_MECHS,
+                             CKM_EDDSA };
     bool add_rsasig = false;
     bool add_rsaenc = false;
     int cl_size = sizeof(checklist) / sizeof(CK_ULONG);
@@ -715,6 +748,13 @@ static CK_RV operations_init(P11PROV_CTX *ctx)
                 ADD_ALGO(SHA3_512, sha3_512, digest);
                 UNCHECK_MECHS(CKM_SHA3_512);
                 break;
+            case CKM_EDDSA:
+                ADD_ALGO_EXT(ED25519, signature, P11PROV_DEFAULT_PROPERTIES,
+                             p11prov_eddsa_signature_functions);
+                ADD_ALGO_EXT(ED448, signature, P11PROV_DEFAULT_PROPERTIES,
+                             p11prov_eddsa_signature_functions);
+                UNCHECK_MECHS(CKM_EC_EDWARDS_KEY_PAIR_GEN, CKM_EDDSA);
+                break;
             default:
                 P11PROV_raise(ctx, CKR_GENERAL_ERROR,
                               "Unhandled mechianism %lu", mech);
@@ -774,6 +814,10 @@ static const OSSL_ALGORITHM p11prov_keymgmt[] = {
       p11prov_ec_keymgmt_functions, P11PROV_DESCS_EC },
     { P11PROV_NAMES_HKDF, P11PROV_DEFAULT_PROPERTIES,
       p11prov_hkdf_keymgmt_functions, P11PROV_DESCS_HKDF },
+    { P11PROV_NAMES_ED25519, P11PROV_DEFAULT_PROPERTIES,
+      p11prov_ed25519_keymgmt_functions, P11PROV_DESCS_ED25519 },
+    { P11PROV_NAMES_ED448, P11PROV_DEFAULT_PROPERTIES,
+      p11prov_ed448_keymgmt_functions, P11PROV_DESCS_ED448 },
     { NULL, NULL, NULL, NULL },
 };
 
@@ -959,11 +1003,12 @@ static const OSSL_DISPATCH p11prov_dispatch_table[] = {
 int OSSL_provider_init(const OSSL_CORE_HANDLE *handle, const OSSL_DISPATCH *in,
                        const OSSL_DISPATCH **out, void **provctx)
 {
-    OSSL_PARAM core_params[6] = { 0 };
+    OSSL_PARAM core_params[7] = { 0 };
     const char *path = NULL;
     const char *init_args = NULL;
     char *allow_export = NULL;
     char *login_behavior = NULL;
+    char *load = NULL;
     char *pin = NULL;
     P11PROV_CTX *ctx;
     int ret;
@@ -1006,7 +1051,9 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *handle, const OSSL_DISPATCH *in,
     core_params[4] =
         OSSL_PARAM_construct_utf8_ptr(P11PROV_PKCS11_MODULE_LOGIN_BEHAVIOR,
                                       &login_behavior, sizeof(login_behavior));
-    core_params[5] = OSSL_PARAM_construct_end();
+    core_params[5] = OSSL_PARAM_construct_utf8_ptr(
+        P11PROV_PKCS11_MODULE_LOAD_BEHAVIOR, &load, sizeof(load));
+    core_params[6] = OSSL_PARAM_construct_end();
     ret = core_get_params(handle, core_params);
     if (ret != RET_OSSL_OK) {
         ERR_raise(ERR_LIB_PROV, PROV_R_FAILED_TO_GET_PARAMETER);
@@ -1052,6 +1099,15 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *handle, const OSSL_DISPATCH *in,
         } else {
             P11PROV_raise(ctx, CKR_GENERAL_ERROR, "Invalid value for %s: (%s)",
                           P11PROV_PKCS11_MODULE_LOGIN_BEHAVIOR, login_behavior);
+            p11prov_ctx_free(ctx);
+            return RET_OSSL_ERR;
+        }
+    }
+
+    if (load != NULL && strcmp(load, "early") == 0) {
+        /* this triggers early module loading */
+        ret = p11prov_ctx_status(ctx);
+        if (ret != CKR_OK) {
             p11prov_ctx_free(ctx);
             return RET_OSSL_ERR;
         }

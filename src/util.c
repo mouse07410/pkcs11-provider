@@ -268,6 +268,8 @@ P11PROV_URI *p11prov_parse_uri(P11PROV_CTX *ctx, const char *uri)
     const char *p, *end;
     int ret;
 
+    P11PROV_debug("ctx=%p uri=%s)", ctx, uri);
+
     u = OPENSSL_zalloc(sizeof(struct p11prov_uri));
     if (u == NULL) {
         return NULL;
@@ -646,3 +648,12 @@ done:
     }
     return buf;
 }
+
+void trim_padded_field(CK_UTF8CHAR *field, ssize_t n)
+{
+    for (; n > 0 && field[n - 1] == ' '; n--) {
+        field[n - 1] = 0;
+    }
+}
+
+#define trim(x) trim_padded_field(x, sizeof(x))
