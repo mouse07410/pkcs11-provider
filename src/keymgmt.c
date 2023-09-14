@@ -139,7 +139,7 @@ static void *p11prov_common_gen_init(void *provctx, int selection,
     unsigned char def_e[] = { 0x01, 0x00, 0x01 };
     int ret;
 
-    P11PROV_debug("rsa gen_init %p", provctx);
+    P11PROV_debug("common gen_init %p", provctx);
 
     ret = p11prov_ctx_status(provctx);
     if (ret != CKR_OK) {
@@ -1154,7 +1154,7 @@ static void *p11prov_ec_gen(void *genctx, OSSL_CALLBACK *cb_fn, void *cb_arg)
         { CKA_EC_PARAMS, (CK_BYTE *)ctx->data.ec.ec_params,
           ctx->data.ec.ec_params_size },
     };
-#define EC_PRIVKEY_TMPL_SIZE 6
+#define EC_PRIVKEY_TMPL_SIZE 5
     CK_ATTRIBUTE privkey_template[EC_PRIVKEY_TMPL_SIZE + COMMON_TMPL_SIZE] = {
         { CKA_TOKEN, DISCARD_CONST(&val_true), sizeof(CK_BBOOL) },
         { CKA_PRIVATE, DISCARD_CONST(&val_true), sizeof(CK_BBOOL) },
