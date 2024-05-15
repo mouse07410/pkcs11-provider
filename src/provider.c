@@ -37,8 +37,8 @@ struct p11prov_ctx {
     /* cfg quirks */
     bool no_deinit;
     bool no_allowed_mechanisms;
-    bool no_operation_state;
     bool no_session_callbacks;
+    uint64_t blocked_calls;
 
     /* module handles and data */
     P11PROV_MODULE *module;
@@ -613,9 +613,9 @@ int p11prov_ctx_cache_sessions(P11PROV_CTX *ctx)
     return ctx->cache_sessions;
 }
 
-bool p11prov_ctx_no_operation_state(P11PROV_CTX *ctx)
+bool p11prov_ctx_is_call_blocked(P11PROV_CTX *ctx, uint64_t mask)
 {
-    return ctx->no_operation_state;
+    return (ctx->blocked_calls & mask) != 0;
 }
 
 bool p11prov_ctx_no_session_callbacks(P11PROV_CTX *ctx)
@@ -1083,6 +1083,10 @@ static CK_RV operations_init(P11PROV_CTX *ctx)
     ADD_ALGO_EXT(EC, encoder,
                  "provider=pkcs11,output=der,structure=SubjectPublicKeyInfo",
                  p11prov_ec_encoder_spki_der_functions);
+    ADD_ALGO_EXT(ED25519, encoder, "provider=pkcs11,output=text",
+                 p11prov_ec_edwards_encoder_text_functions);
+    ADD_ALGO_EXT(ED448, encoder, "provider=pkcs11,output=text",
+                 p11prov_ec_edwards_encoder_text_functions);
     if (ctx->encode_pkey_as_pk11_uri) {
         ADD_ALGO_EXT(RSA, encoder,
                      "provider=pkcs11,output=pem,structure=PrivateKeyInfo",
@@ -1532,7 +1536,7 @@ int OSSL_provider_init(const OSSL_CORE_HANDLE *handle, const OSSL_DISPATCH *in,
             } else if (strncmp(str, "no-allowed-mechanisms", toklen) == 0) {
                 ctx->no_allowed_mechanisms = true;
             } else if (strncmp(str, "no-operation-state", toklen) == 0) {
-                ctx->no_operation_state = true;
+                ctx->blocked_calls |= P11PROV_BLOCK_GetOperationState;
             } else if (strncmp(str, "no-session-callbacks", toklen) == 0) {
                 ctx->no_session_callbacks = true;
             }

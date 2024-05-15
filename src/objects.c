@@ -1870,7 +1870,6 @@ static int p11prov_obj_export_public_ec_key(P11PROV_OBJ *obj,
     switch (key_type) {
     case CKK_EC:
         attrs[0].type = CKA_P11PROV_CURVE_NID;
-        nattr = 1;
         rv = get_public_attrs(obj, attrs, 1);
         if (rv != CKR_OK) {
             P11PROV_raise(obj->ctx, rv, "Failed to get EC key curve nid");
@@ -1991,6 +1990,38 @@ int p11prov_obj_export_public_key(P11PROV_OBJ *obj, CK_KEY_TYPE key_type,
         P11PROV_raise(obj->ctx, CKR_GENERAL_ERROR, "Unsupported key type");
         return RET_OSSL_ERR;
     }
+}
+
+int p11prov_obj_get_ed_pub_key(P11PROV_OBJ *obj, CK_ATTRIBUTE **pub)
+{
+    CK_ATTRIBUTE *a;
+
+    P11PROV_debug("get ed pubkey %p", obj);
+
+    if (!obj) {
+        return RET_OSSL_ERR;
+    }
+
+    if (obj->class != CKO_PRIVATE_KEY && obj->class != CKO_PUBLIC_KEY) {
+        P11PROV_raise(obj->ctx, CKR_GENERAL_ERROR, "Invalid Object Class");
+        return RET_OSSL_ERR;
+    }
+
+    if (obj->data.key.type != CKK_EC_EDWARDS) {
+        P11PROV_raise(obj->ctx, CKR_GENERAL_ERROR, "Unsupported key type");
+        return RET_OSSL_ERR;
+    }
+
+    /* See if we have cached attributes first */
+    a = p11prov_obj_get_attr(obj, CKA_P11PROV_PUB_KEY);
+    if (!a) {
+        return RET_OSSL_ERR;
+    }
+
+    if (pub) {
+        *pub = a;
+    }
+    return RET_OSSL_OK;
 }
 
 int p11prov_obj_get_ec_public_x_y(P11PROV_OBJ *obj, CK_ATTRIBUTE **pub_x,
